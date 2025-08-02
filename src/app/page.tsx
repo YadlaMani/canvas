@@ -7,6 +7,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { getPixels } from "@/actions/canvasActions";
 import { NextResponse } from "next/server";
+import { Button } from "@/components/ui/button";
 
 type getResponse = {
   succcess: boolean;
@@ -20,13 +21,14 @@ type getResponse = {
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pixel, setPixel] = useState<Map<string, string>>(new Map());
-  const canvasSize = 1000;
+  const canvasSize = 10;
   const pixelSize = 3;
   async function fetchPixelsData() {
     try {
       const res = await getPixels();
       if (res.success) {
         const pixels = res.pixels || [];
+        console.log(pixels);
         const pixelMap = new Map<string, string>();
         pixels.forEach((p) => {
           pixelMap.set(`${p.x},${p.y}`, p.color);
@@ -39,6 +41,7 @@ export default function Home() {
       console.log("Error fetching pixels:", err);
     }
   }
+
   useEffect(() => {
     fetchPixelsData();
   }, []);
@@ -50,6 +53,7 @@ export default function Home() {
         height={canvasSize * pixelSize}
         className="border"
       />
+      <Button />
     </div>
   );
 }
