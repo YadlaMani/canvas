@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { monadTestnet } from "viem/chains";
 
 type PixelInfo = {
   color: string;
@@ -261,6 +260,7 @@ export default function Home() {
         color: selectedColor,
         walletAddress: address || "unknown",
       });
+      console.log(lastChanged);
       const res = await changePixelColor(
         selectedPixel.x,
         selectedPixel.y,
@@ -348,6 +348,7 @@ export default function Home() {
     ownerCount[info.walletAddress] = (ownerCount[info.walletAddress] || 0) + 1;
   });
   const topOwner = Object.entries(ownerCount).sort((a, b) => b[1] - a[1])[0];
+  console.log(topOwner);
 
   const selectedPixelInfo = selectedPixel
     ? pixels.get(`${selectedPixel.x},${selectedPixel.y}`)

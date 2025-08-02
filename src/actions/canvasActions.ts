@@ -21,6 +21,7 @@ export async function getPixels(): Promise<getResponse> {
       pixels: pixels,
     };
   } catch (err) {
+    console.error("Error fetching pixels:", err);
     return {
       success: false,
       error: "Failed to fetch pixels",
@@ -40,7 +41,8 @@ export async function changePixelColor(
       { x, y },
       { color, walletAddress, lastUpdated: new Date() },
       { new: true, upsert: true }
-    ).lean(); // Optional: makes returned object a plain JS object
+    ).lean();
+    console.log(pixel);
 
     return {
       success: true,
