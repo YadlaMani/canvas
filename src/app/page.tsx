@@ -53,7 +53,7 @@ export default function Home() {
     x: number;
     y: number;
   } | null>(null);
-  const [selectedColor, setSelectedColor] = useState("#3498db");
+  const [selectedColor, setSelectedColor] = useState("#c43e00ff");
 
   const updateViewportSize = () => {
     if (containerRef.current) {
@@ -266,6 +266,13 @@ export default function Home() {
     fetchPixelsData();
   }, []);
 
+  // Calculate top owner
+  const ownerCount: Record<string, number> = {};
+  pixels.forEach((info) => {
+    ownerCount[info.walletAddress] = (ownerCount[info.walletAddress] || 0) + 1;
+  });
+  const topOwner = Object.entries(ownerCount).sort((a, b) => b[1] - a[1])[0];
+
   const selectedPixelInfo = selectedPixel
     ? pixels.get(`${selectedPixel.x},${selectedPixel.y}`)
     : null;
@@ -281,9 +288,7 @@ export default function Home() {
             ref={canvasRef}
             width={viewportSize.width}
             height={viewportSize.height}
-            className={`w-full h-full ${
-              isDragging ? "cursor-grabbing" : "cursor-pointer"
-            }`}
+            className="w-full h-full"
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
             onMouseDown={handleMouseDown}
@@ -295,7 +300,8 @@ export default function Home() {
       </Card>
 
       <div className="mt-6 flex flex-col md:flex-row gap-6 w-full max-w-4xl">
-        <div className="flex-1 p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
+        {/* Last Changed Pixel Card */}
+        <Card className="flex-1 p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
           <h3 className="text-lg font-semibold mb-2">Last Changed Pixel</h3>
           {lastChanged ? (
             <div>
@@ -312,8 +318,9 @@ export default function Home() {
           ) : (
             <div className="text-gray-500">No pixel changed yet.</div>
           )}
-        </div>
-        <div className="flex-1 p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
+        </Card>
+        {/* Active Pixel Card */}
+        <Card className="flex-1 p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
           <h3 className="text-lg font-semibold mb-2">Active Pixel</h3>
           {hovered ? (
             <div>
@@ -324,7 +331,21 @@ export default function Home() {
           ) : (
             <div className="text-gray-500">No active pixel</div>
           )}
-        </div>
+        </Card>
+        {/* Top Owner Card */}
+        <Card className="flex-1 p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
+          <h3 className="text-lg font-semibold mb-2">Top Owner</h3>
+          {topOwner ? (
+            <div>
+              <span className="font-mono">{topOwner[0]}</span>
+              <div className="text-sm text-gray-600">
+                Pixels owned: <span className="font-bold">{topOwner[1]}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-gray-500">No owners yet.</div>
+          )}
+        </Card>
       </div>
 
       {/* Pixel Edit Dialog */}
