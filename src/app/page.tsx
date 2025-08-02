@@ -342,6 +342,13 @@ export default function Home() {
     fetchPixelsData();
   }, []);
 
+  // Calculate top owner
+  const ownerCount: Record<string, number> = {};
+  pixels.forEach((info) => {
+    ownerCount[info.walletAddress] = (ownerCount[info.walletAddress] || 0) + 1;
+  });
+  const topOwner = Object.entries(ownerCount).sort((a, b) => b[1] - a[1])[0];
+
   const selectedPixelInfo = selectedPixel
     ? pixels.get(`${selectedPixel.x},${selectedPixel.y}`)
     : null;
@@ -390,9 +397,7 @@ export default function Home() {
             ref={canvasRef}
             width={viewportSize.width}
             height={viewportSize.height}
-            className={`w-full h-full ${
-              isDragging ? "cursor-grabbing" : "cursor-pointer"
-            }`}
+            className="w-full h-full"
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
             onMouseDown={handleMouseDown}
