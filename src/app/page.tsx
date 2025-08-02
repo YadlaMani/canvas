@@ -1,13 +1,24 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import type React from "react";
+
 import { getPixels } from "@/actions/canvasActions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 type PixelInfo = {
   color: string;
-  owner: string;
-  lastChanged: Date;
+  walletAddress: string;
+  lastUpdated: Date;
 };
 
 const CANVAS_WIDTH = 300;
@@ -29,12 +40,20 @@ export default function Home() {
     x: number;
     y: number;
     color: string;
-    owner: string;
+    walletAddress: string;
   } | null>(null);
   const [viewportSize, setViewportSize] = useState({
     width: 1200,
     height: 400,
   });
+
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedPixel, setSelectedPixel] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [selectedColor, setSelectedColor] = useState("#3498db");
 
   const updateViewportSize = () => {
     if (containerRef.current) {
@@ -50,11 +69,12 @@ export default function Home() {
   }, []);
 
   const BASE_PIXEL_SIZE = viewportSize.width / CANVAS_WIDTH;
-  const MIN_ZOOM = 1; // Can't zoom out below fit-to-container
+  const MIN_ZOOM = 1;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -154,7 +174,6 @@ export default function Home() {
     e.preventDefault();
     const zoomFactor = 1.1;
     let newZoom = zoom;
-
     if (e.deltaY < 0) {
       newZoom = Math.min(zoom * zoomFactor, 10);
     } else {
@@ -166,12 +185,11 @@ export default function Home() {
     const mouseY = e.clientY - rect.top;
     const prevPixelSize = BASE_PIXEL_SIZE * zoom;
     const nextPixelSize = BASE_PIXEL_SIZE * newZoom;
-
     const gridPxW = CANVAS_WIDTH * nextPixelSize;
     const gridPxH = CANVAS_HEIGHT * nextPixelSize;
 
-    let centerX = offset.x + mouseX;
-    let centerY = offset.y + mouseY;
+    const centerX = offset.x + mouseX;
+    const centerY = offset.y + mouseY;
 
     setZoom(newZoom);
     setOffset({
@@ -189,22 +207,38 @@ export default function Home() {
   };
 
   const handleCanvasClick = () => {
-    if (!hovered) return;
+    if (!hovered || isDragging) return;
+
     const key = `${hovered.x},${hovered.y}`;
-    const color = "#3498db";
-    const owner = "0x123...abc";
+    const currentPixel = pixels.get(key);
+
+    setSelectedPixel(hovered);
+    setSelectedColor(currentPixel?.color || "#ffffff");
+    setDialogOpen(true);
+  };
+
+  const handleColorChange = () => {
+    if (!selectedPixel) return;
+
+    const key = `${selectedPixel.x},${selectedPixel.y}`;
+    const walletAddress = "0x123...abc"; // This should come from your wallet connection
+
     const info: PixelInfo = {
-      color,
-      owner,
-      lastChanged: new Date(),
+      color: selectedColor,
+      walletAddress,
+      lastUpdated: new Date(),
     };
+
     setPixels((prev) => new Map(prev).set(key, info));
     setLastChanged({
-      x: hovered.x,
-      y: hovered.y,
-      color,
-      owner,
+      x: selectedPixel.x,
+      y: selectedPixel.y,
+      color: selectedColor,
+      walletAddress,
     });
+
+    setDialogOpen(false);
+    setSelectedPixel(null);
   };
 
   async function fetchPixelsData() {
@@ -215,8 +249,8 @@ export default function Home() {
         res.pixels?.forEach((p) => {
           pixelMap.set(`${p.x},${p.y}`, {
             color: p.color,
-            owner: "fetched",
-            lastChanged: new Date(),
+            walletAddress: p.walletAddress || "unknown",
+            lastUpdated: new Date(p.lastUpdated || Date.now()),
           });
         });
         setPixels(pixelMap);
@@ -232,8 +266,12 @@ export default function Home() {
     fetchPixelsData();
   }, []);
 
+  const selectedPixelInfo = selectedPixel
+    ? pixels.get(`${selectedPixel.x},${selectedPixel.y}`)
+    : null;
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen  p-4">
+    <div className="flex flex-col items-center justify-center min-h-screen p-4">
       <Card>
         <div
           ref={containerRef}
@@ -268,13 +306,13 @@ export default function Home() {
               <span className="font-bold" style={{ color: lastChanged.color }}>
                 {lastChanged.color}
               </span>{" "}
-              by <span className="text-gray-600">{lastChanged.owner}</span>
+              by{" "}
+              <span className="text-gray-600">{lastChanged.walletAddress}</span>
             </div>
           ) : (
             <div className="text-gray-500">No pixel changed yet.</div>
           )}
         </div>
-
         <div className="flex-1 p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
           <h3 className="text-lg font-semibold mb-2">Active Pixel</h3>
           {hovered ? (
@@ -289,9 +327,115 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="mt-6">
-        <Button onClick={fetchPixelsData}>Refresh Pixels</Button>
-      </div>
+      {/* Pixel Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Edit Pixel{" "}
+              {selectedPixel && `(${selectedPixel.x}, ${selectedPixel.y})`}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            {/* Current Pixel Info */}
+            {selectedPixelInfo && (
+              <div className="space-y-2">
+                <h4 className="font-medium text-sm text-gray-700">
+                  Current Pixel Info
+                </h4>
+                <div className="bg-gray-50 p-3 rounded-lg space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Owner:</span>
+                    <span className="font-mono">
+                      {selectedPixelInfo.walletAddress}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Last Updated:</span>
+                    <span>
+                      {selectedPixelInfo.lastUpdated.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Current Color:</span>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-4 h-4 rounded border border-gray-300"
+                        style={{ backgroundColor: selectedPixelInfo.color }}
+                      />
+                      <span className="font-mono text-xs">
+                        {selectedPixelInfo.color}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Color Picker */}
+            <div className="space-y-3">
+              <Label htmlFor="color-picker" className="text-sm font-medium">
+                Choose New Color
+              </Label>
+              <div className="flex items-center gap-4">
+                <Input
+                  id="color-picker"
+                  type="color"
+                  value={selectedColor}
+                  onChange={(e) => setSelectedColor(e.target.value)}
+                  className="w-16 h-16 rounded-lg border border-gray-300 cursor-pointer"
+                />
+                <div className="space-y-1">
+                  <div className="text-sm text-gray-600">Selected Color:</div>
+                  <div className="font-mono text-sm">{selectedColor}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Color Presets */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Quick Colors</Label>
+              <div className="grid grid-cols-8 gap-2">
+                {[
+                  "#FF0000",
+                  "#00FF00",
+                  "#0000FF",
+                  "#FFFF00",
+                  "#FF00FF",
+                  "#00FFFF",
+                  "#FFA500",
+                  "#800080",
+                  "#FFC0CB",
+                  "#A52A2A",
+                  "#808080",
+                  "#000000",
+                  "#FFFFFF",
+                  "#90EE90",
+                  "#FFB6C1",
+                  "#87CEEB",
+                ].map((color) => (
+                  <Button
+                    key={color}
+                    onClick={() => setSelectedColor(color)}
+                    className={`w-8 h-8 rounded border-2 transition-all ${
+                      selectedColor === color
+                        ? "border-gray-800 scale-110"
+                        : "border-gray-300 hover:border-gray-500"
+                    }`}
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleColorChange}>Update Pixel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
