@@ -1,11 +1,14 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
+import { pay } from "@reown/appkit-pay";
 
-import { getPixels } from "@/actions/canvasActions";
+import { getPixels, changePixelColor } from "@/actions/canvasActions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+
+import { useAppKitAccount } from "@reown/appkit/react";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +17,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { monadTestnet } from "viem/chains";
 
 type PixelInfo = {
   color: string;
@@ -33,6 +38,13 @@ export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pixels, setPixels] = useState<Map<string, PixelInfo>>(new Map());
   const [hovered, setHovered] = useState<{ x: number; y: number } | null>(null);
+  const [recentEdits, setRecentEdits] = useState<
+    { x: number; y: number; color: string; walletAddress: string; time: Date }[]
+  >([]);
+  const [leaderboard, setLeaderboard] = useState<
+    { walletAddress: string; count: number }[]
+  >([]);
+
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -47,13 +59,13 @@ export default function Home() {
     height: 400,
   });
 
-  // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedPixel, setSelectedPixel] = useState<{
     x: number;
     y: number;
   } | null>(null);
   const [selectedColor, setSelectedColor] = useState("#3498db");
+  const { address, isConnected } = useAppKitAccount();
 
   const updateViewportSize = () => {
     if (containerRef.current) {
@@ -81,7 +93,6 @@ export default function Home() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const pixelSize = BASE_PIXEL_SIZE * zoom;
 
-    // Draw Pixels
     pixels.forEach((info, key) => {
       const [x, y] = key.split(",").map(Number);
       ctx.fillStyle = info.color;
@@ -93,7 +104,6 @@ export default function Home() {
       );
     });
 
-    // Draw Grid Lines
     ctx.strokeStyle = "rgba(0,0,0,0.08)";
     ctx.lineWidth = 1;
     for (let i = 0; i <= CANVAS_WIDTH; i++) {
@@ -115,7 +125,6 @@ export default function Home() {
       }
     }
 
-    // Highlight Hovered Pixel
     if (hovered) {
       ctx.save();
       ctx.strokeStyle = "#FFD700";
@@ -217,28 +226,58 @@ export default function Home() {
     setDialogOpen(true);
   };
 
-  const handleColorChange = () => {
+  const handleColorChange = async () => {
     if (!selectedPixel) return;
-
+    if (!isConnected) {
+      toast.error("Wallet Should be connected to change pixel color");
+      return;
+    }
     const key = `${selectedPixel.x},${selectedPixel.y}`;
-    const walletAddress = "0x123...abc"; // This should come from your wallet connection
 
-    const info: PixelInfo = {
-      color: selectedColor,
-      walletAddress,
-      lastUpdated: new Date(),
-    };
-
-    setPixels((prev) => new Map(prev).set(key, info));
-    setLastChanged({
-      x: selectedPixel.x,
-      y: selectedPixel.y,
-      color: selectedColor,
-      walletAddress,
+    const result = await pay({
+      recipient: process.env.NEXT_PUBLIC_FAT_WALLLET_ADDRESS!,
+      amount: 0.1,
+      paymentAsset: {
+        network: "eip155:10143",
+        asset: "native",
+        metadata: {
+          name: "Monad",
+          symbol: "MON",
+          decimals: 18,
+        },
+      },
     });
+    if (result.success) {
+      const info: PixelInfo = {
+        color: selectedColor,
+        walletAddress: address || "unknown",
+        lastUpdated: new Date(),
+      };
 
-    setDialogOpen(false);
-    setSelectedPixel(null);
+      setPixels((prev) => new Map(prev).set(key, info));
+      setLastChanged({
+        x: selectedPixel.x,
+        y: selectedPixel.y,
+        color: selectedColor,
+        walletAddress: address || "unknown",
+      });
+      const res = await changePixelColor(
+        selectedPixel.x,
+        selectedPixel.y,
+        selectedColor,
+        address || "unknown"
+      );
+      if (res.success) {
+        toast.success("Pixel color changed successfully!");
+      } else {
+        toast.error("Failed to change pixel color, please try again later.");
+      }
+
+      setDialogOpen(false);
+      setSelectedPixel(null);
+    } else {
+      toast.error("Failed transaction,please try again later");
+    }
   };
 
   async function fetchPixelsData() {
@@ -246,14 +285,51 @@ export default function Home() {
       const res = await getPixels();
       if (res.success) {
         const pixelMap = new Map<string, PixelInfo>();
+        const walletPixelCount: Record<string, number> = {};
+        const editList: {
+          x: number;
+          y: number;
+          color: string;
+          walletAddress: string;
+          time: Date;
+        }[] = [];
+
         res.pixels?.forEach((p) => {
-          pixelMap.set(`${p.x},${p.y}`, {
+          const key = `${p.x},${p.y}`;
+          const updatedDate = new Date(p.lastUpdated || Date.now());
+
+          pixelMap.set(key, {
             color: p.color,
             walletAddress: p.walletAddress || "unknown",
-            lastUpdated: new Date(p.lastUpdated || Date.now()),
+            lastUpdated: updatedDate,
+          });
+
+          // Count for leaderboard
+          const addr = p.walletAddress || "unknown";
+          walletPixelCount[addr] = (walletPixelCount[addr] || 0) + 1;
+
+          // Prepare recent edit list
+          editList.push({
+            x: p.x,
+            y: p.y,
+            color: p.color,
+            walletAddress: addr,
+            time: updatedDate,
           });
         });
+
+        // Sort by most recent edits
+        editList.sort((a, b) => b.time.getTime() - a.time.getTime());
+
+        // Convert to leaderboard list
+        const leaderboardArray = Object.entries(walletPixelCount)
+          .map(([walletAddress, count]) => ({ walletAddress, count }))
+          .sort((a, b) => b.count - a.count);
+
+        // Update States
         setPixels(pixelMap);
+        setRecentEdits(editList.slice(0, 10)); // Last 10 edits
+        setLeaderboard(leaderboardArray);
       } else {
         console.error(res.error);
       }
@@ -272,6 +348,39 @@ export default function Home() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4">
+      {hovered && (
+        <Card className="fixed bottom-8 right-8 w-64 p-4 shadow-lg z-50 space-y-3">
+          <h4 className="text-base font-semibold">Hovered Pixel</h4>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Coordinates:</span>
+            <span className="font-mono">
+              ({hovered.x}, {hovered.y})
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Color:</span>
+            <div className="flex items-center gap-2">
+              <div
+                className="w-5 h-5 rounded border shadow-inner"
+                style={{
+                  backgroundColor:
+                    pixels.get(`${hovered.x},${hovered.y}`)?.color || "#ffffff",
+                }}
+              />
+              <span className="font-mono text-xs">
+                {pixels.get(`${hovered.x},${hovered.y}`)?.color || "#ffffff"}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Owner:</span>
+            <span className="font-mono text-xs truncate max-w-[140px]">
+              {pixels.get(`${hovered.x},${hovered.y}`)?.walletAddress || "—"}
+            </span>
+          </div>
+        </Card>
+      )}
+
       <Card>
         <div
           ref={containerRef}
@@ -294,40 +403,63 @@ export default function Home() {
         </div>
       </Card>
 
-      <div className="mt-6 flex flex-col md:flex-row gap-6 w-full max-w-4xl">
-        <div className="flex-1 p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
-          <h3 className="text-lg font-semibold mb-2">Last Changed Pixel</h3>
-          {lastChanged ? (
-            <div>
-              <strong>
-                ({lastChanged.x}, {lastChanged.y})
-              </strong>{" "}
-              colored{" "}
-              <span className="font-bold" style={{ color: lastChanged.color }}>
-                {lastChanged.color}
-              </span>{" "}
-              by{" "}
-              <span className="text-gray-600">{lastChanged.walletAddress}</span>
-            </div>
-          ) : (
-            <div className="text-gray-500">No pixel changed yet.</div>
-          )}
-        </div>
-        <div className="flex-1 p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
-          <h3 className="text-lg font-semibold mb-2">Active Pixel</h3>
-          {hovered ? (
-            <div>
-              <strong>
-                ({hovered.x}, {hovered.y})
-              </strong>
-            </div>
-          ) : (
-            <div className="text-gray-500">No active pixel</div>
-          )}
-        </div>
+      <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
+        <Card className="p-6 space-y-4 shadow-sm">
+          <h3 className="text-xl font-semibold tracking-tight">Recent Edits</h3>
+          <div className="space-y-3">
+            {recentEdits.length === 0 ? (
+              <div className="text-muted-foreground text-sm">No edits yet.</div>
+            ) : (
+              recentEdits.map((edit, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between text-sm border rounded-md px-3 py-2"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-4 h-4 rounded border shadow-inner"
+                      style={{ backgroundColor: edit.color }}
+                    />
+                    <span className="font-medium">
+                      ({edit.x},{edit.y})
+                    </span>
+                  </div>
+                  <div className="font-mono text-xs truncate max-w-[120px] text-right">
+                    {edit.walletAddress}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
+
+        <Card className="p-6 space-y-4 shadow-sm">
+          <h3 className="text-xl font-semibold tracking-tight">Leaderboard</h3>
+          <div className="space-y-3">
+            {leaderboard.length === 0 ? (
+              <div className="text-muted-foreground text-sm">
+                No entries yet.
+              </div>
+            ) : (
+              leaderboard.slice(0, 10).map((entry, idx) => (
+                <div
+                  key={entry.walletAddress}
+                  className="flex justify-between items-center text-sm border rounded-md px-3 py-2"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold">{idx + 1}.</span>
+                    <span className="font-mono text-xs truncate max-w-[120px]">
+                      {entry.walletAddress}
+                    </span>
+                  </div>
+                  <span className="font-semibold">{entry.count} px</span>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
       </div>
 
-      {/* Pixel Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -338,7 +470,6 @@ export default function Home() {
           </DialogHeader>
 
           <div className="space-y-6">
-            {/* Current Pixel Info */}
             {selectedPixelInfo && (
               <div className="space-y-2">
                 <h4 className="font-medium text-sm text-gray-700">
@@ -373,7 +504,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Color Picker */}
             <div className="space-y-3">
               <Label htmlFor="color-picker" className="text-sm font-medium">
                 Choose New Color
@@ -387,13 +517,11 @@ export default function Home() {
                   className="w-16 h-16 rounded-lg border border-gray-300 cursor-pointer"
                 />
                 <div className="space-y-1">
-                  <div className="text-sm text-gray-600">Selected Color:</div>
+                  <div className="text-sm">Selected Color:</div>
                   <div className="font-mono text-sm">{selectedColor}</div>
                 </div>
               </div>
             </div>
-
-            {/* Color Presets */}
             <div className="space-y-3">
               <Label className="text-sm font-medium">Quick Colors</Label>
               <div className="grid grid-cols-8 gap-2">

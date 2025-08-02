@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 
-import { headers } from "next/headers"; // added
+import { headers } from "next/headers";
 import "./globals.css";
 import ContextProvider from "@/context";
 import Navbar from "@/components/Navbar";
-
+import { Toaster } from "sonner";
+import { ThemeProvider } from "@/components/theme-provider";
 export const metadata: Metadata = {
   title: "Canvas",
   description: "Place your pixel on the monad chain",
@@ -21,10 +22,13 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body>
-        <ContextProvider cookies={cookies}>
-          <Navbar />
-          {children}
-        </ContextProvider>
+        <ThemeProvider attribute="class" disableTransitionOnChange>
+          <ContextProvider cookies={cookies}>
+            <Navbar />
+            <Toaster richColors position="top-right" />
+            {children}
+          </ContextProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

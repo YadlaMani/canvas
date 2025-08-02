@@ -27,3 +27,29 @@ export async function getPixels(): Promise<getResponse> {
     };
   }
 }
+
+export async function changePixelColor(
+  x: number,
+  y: number,
+  color: string,
+  walletAddress: string
+): Promise<getResponse> {
+  await dbConnect();
+  try {
+    const pixel = await Pixel.findOneAndUpdate(
+      { x, y },
+      { color, walletAddress, lastUpdated: new Date() },
+      { new: true, upsert: true }
+    ).lean(); // Optional: makes returned object a plain JS object
+
+    return {
+      success: true,
+    };
+  } catch (err) {
+    console.error("Error updating pixel:", err);
+    return {
+      success: false,
+      error: "Failed to change pixel color",
+    };
+  }
+}
