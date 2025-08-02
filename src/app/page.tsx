@@ -304,11 +304,9 @@ export default function Home() {
             lastUpdated: updatedDate,
           });
 
-          // Count for leaderboard
           const addr = p.walletAddress || "unknown";
           walletPixelCount[addr] = (walletPixelCount[addr] || 0) + 1;
 
-          // Prepare recent edit list
           editList.push({
             x: p.x,
             y: p.y,
@@ -318,17 +316,14 @@ export default function Home() {
           });
         });
 
-        // Sort by most recent edits
         editList.sort((a, b) => b.time.getTime() - a.time.getTime());
 
-        // Convert to leaderboard list
         const leaderboardArray = Object.entries(walletPixelCount)
           .map(([walletAddress, count]) => ({ walletAddress, count }))
           .sort((a, b) => b.count - a.count);
 
-        // Update States
         setPixels(pixelMap);
-        setRecentEdits(editList.slice(0, 10)); // Last 10 edits
+        setRecentEdits(editList.slice(0, 10));
         setLeaderboard(leaderboardArray);
       } else {
         console.error(res.error);
@@ -342,7 +337,6 @@ export default function Home() {
     fetchPixelsData();
   }, []);
 
-  // Calculate top owner
   const ownerCount: Record<string, number> = {};
   pixels.forEach((info) => {
     ownerCount[info.walletAddress] = (ownerCount[info.walletAddress] || 0) + 1;
