@@ -6,8 +6,8 @@ import ContextProvider from "@/context";
 import Navbar from "@/components/Navbar";
 
 export const metadata: Metadata = {
-  title: "AppKit in Next.js + wagmi",
-  description: "AppKit example dApp",
+  title: "Canvas",
+  description: "Place your pixel on the monad chain",
 };
 
 export default async function RootLayout({
