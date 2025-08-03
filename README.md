@@ -6,7 +6,8 @@ A collaborative pixel art canvas built on the **Monad blockchain** where users c
 
 ## Screenshot
 
-<img src="./demo.png" alt="Canvas Demo" width="800">
+<img src="https://github.com/YadlaMani/canvas/public/demo.png" alt="Canvas Demo" width="800">
+
 
 ## 🎨 Features
 
