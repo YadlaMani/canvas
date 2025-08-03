@@ -2,6 +2,12 @@
 
 A collaborative pixel art canvas built on the **Monad blockchain** where users can own and customize individual pixels using cryptocurrency. Experience the future of decentralized digital art on Monad's high-performance EVM-compatible Layer 1 network.
 
+## Checkout here: https://canvas-monad.vercel.app/
+
+## Screenshot
+
+![WhatsApp Image 2025-08-02 at 16 29 26_2679b5a9](https://github.com/user-attachments/assets/109f2d54-51ea-4163-aee2-c6e5cf2ab0ce)
+
 ## 🎨 Features
 
 - **Interactive Pixel Canvas**: 300x100 pixel grid with smooth zooming and panning
